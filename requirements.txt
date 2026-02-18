@@ -1,11 +1,5 @@
-ipykernel
 numpy
 pandas
-matplotlib
-scikit-learn
-tensorflow
-seaborn
 xgboost
-imbalanced-learn
 joblib
 fastapi
