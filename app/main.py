@@ -1,10 +1,10 @@
 import os
+from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import pandas as pd
 import joblib
-import numpy as np
 
 app = FastAPI(title="Churn What-If API")
 
@@ -22,12 +22,29 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Load all artifacts
-model = joblib.load("app/model.pkl")
-threshold = joblib.load("app/threshold.pkl")
-features = joblib.load("app/feature_names.pkl")  # This contains all columns (including dummies)
-baseline = joblib.load("app/baseline.pkl")      # This is x_train.mean()
-scaler = joblib.load("app/scaler.pkl")          # Fitted on specific numerical columns
+ARTIFACT_DIR = Path(__file__).resolve().parent
+_artifacts = None
+_artifacts_error = None
+
+def _load_artifacts():
+    global _artifacts, _artifacts_error
+    if _artifacts is not None:
+        return _artifacts
+    if _artifacts_error is not None:
+        raise RuntimeError(_artifacts_error)
+
+    try:
+        _artifacts = {
+            "model": joblib.load(ARTIFACT_DIR / "model.pkl"),
+            "threshold": joblib.load(ARTIFACT_DIR / "threshold.pkl"),
+            "features": joblib.load(ARTIFACT_DIR / "feature_names.pkl"),
+            "baseline": joblib.load(ARTIFACT_DIR / "baseline.pkl"),
+            "scaler": joblib.load(ARTIFACT_DIR / "scaler.pkl"),
+        }
+        return _artifacts
+    except Exception as exc:
+        _artifacts_error = f"artifact load failed: {exc}"
+        raise RuntimeError(_artifacts_error) from exc
 
 # Define the user-facing features for the What-If tool
 class PredictionInput(BaseModel):
@@ -46,6 +63,13 @@ def home():
 @app.post("/predict")
 def predict(data: PredictionInput):
     try:
+        artifacts = _load_artifacts()
+        model = artifacts["model"]
+        threshold = artifacts["threshold"]
+        features = artifacts["features"]
+        baseline = artifacts["baseline"]
+        scaler = artifacts["scaler"]
+
         # 1. Start with the baseline (mean of training data)
         # This fills in all the dummy columns (city_Berlin, etc.) with their average frequencies
         input_df = pd.DataFrame([baseline.values], columns=features)
