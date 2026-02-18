@@ -60,6 +60,10 @@ class PredictionInput(BaseModel):
 def home():
     return {"message": "XGBoost Churn API is active"}
 
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
 @app.post("/predict")
 def predict(data: PredictionInput):
     try:

@@ -676,7 +676,7 @@
 
     <div class="api-input-row">
       <label>API Endpoint</label>
-      <input type="text" id="apiUrl" value="http://127.0.0.1:8000" />
+      <input type="text" id="apiUrl" value="" />
     </div>
   </header>
 
@@ -851,6 +851,20 @@
 
   const state = {};
   SLIDER_CONFIG.forEach(c => state[c.key] = c.default);
+
+  const apiInput = document.getElementById('apiUrl');
+  function defaultApiBase() {
+    const host = window.location.hostname;
+    if (host === 'localhost' || host === '127.0.0.1') {
+      return 'http://127.0.0.1:8000';
+    }
+    return window.location.origin;
+  }
+  apiInput.value = defaultApiBase();
+
+  function getBaseUrl() {
+    return apiInput.value.trim().replace(/\/$/, '');
+  }
 
   function escapeHtmlAttr(text) {
     return String(text)
@@ -1061,7 +1075,7 @@
 
   // ── API CALL ─────────────────────────────────────────────
   async function runPredict() {
-    const baseUrl = document.getElementById('apiUrl').value.replace(/\/$/, '');
+    const baseUrl = getBaseUrl();
     const btn = document.getElementById('predictBtn');
     btn.classList.add('loading');
 
@@ -1096,9 +1110,9 @@
 
   // ── STATUS CHECK ─────────────────────────────────────────
   async function checkApiStatus() {
-    const baseUrl = document.getElementById('apiUrl').value.replace(/\/$/, '');
+    const baseUrl = getBaseUrl();
     try {
-      const r = await fetch(`${baseUrl}/`, { signal: AbortSignal.timeout(3000) });
+      const r = await fetch(`${baseUrl}/health`, { signal: AbortSignal.timeout(3000) });
       setStatusLive(r.ok);
     } catch { setStatusLive(false); }
   }
@@ -1123,7 +1137,7 @@
   // ── INIT ─────────────────────────────────────────────────
   initTabs();
   checkApiStatus();
-  document.getElementById('apiUrl').addEventListener('change', checkApiStatus);
+  apiInput.addEventListener('change', checkApiStatus);
 </script>
 </body>
 </html>

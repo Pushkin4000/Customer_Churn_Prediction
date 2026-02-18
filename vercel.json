@@ -3,12 +3,28 @@
     {
       "src": "app/main.py",
       "use": "@vercel/python"
+    },
+    {
+      "src": "main.html",
+      "use": "@vercel/static"
     }
   ],
   "routes": [
     {
-      "src": "/(.*)",
+      "src": "^/predict/?$",
       "dest": "app/main.py"
+    },
+    {
+      "src": "^/health/?$",
+      "dest": "app/main.py"
+    },
+    {
+      "src": "^/main\\.html$",
+      "dest": "main.html"
+    },
+    {
+      "src": "^/$",
+      "dest": "main.html"
     }
   ]
 }
