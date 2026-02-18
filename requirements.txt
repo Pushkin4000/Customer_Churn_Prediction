@@ -3,3 +3,4 @@ xgboost-cpu
 joblib
 fastapi
 numpy
+scikit-learn
