@@ -106,4 +106,3 @@ def predict(data: PredictionInput):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Inference Error: {str(e)}")
 
-handler = app
