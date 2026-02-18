@@ -1,10 +1,26 @@
+import os
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import pandas as pd
 import joblib
 import numpy as np
 
 app = FastAPI(title="Churn What-If API")
+
+# Allow browser clients hosted on a different origin to call this API.
+# Set CORS_ALLOW_ORIGINS as a comma-separated list in production.
+cors_origins = [o.strip() for o in os.getenv("CORS_ALLOW_ORIGINS", "*").split(",") if o.strip()]
+if not cors_origins:
+    cors_origins = ["*"]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=cors_origins,
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Load all artifacts
 model = joblib.load("app/model.pkl")
@@ -65,3 +81,5 @@ def predict(data: PredictionInput):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Inference Error: {str(e)}")
+
+handler = app

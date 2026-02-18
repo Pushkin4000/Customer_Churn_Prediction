@@ -1,0 +1,1129 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Customer Retention Monitor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --font-ui:    'Google Sans', 'Google Sans Text', 'DM Sans', 'Segoe UI', sans-serif;
+      --font-display: 'Google Sans', 'Google Sans Text', 'DM Sans', 'Segoe UI', sans-serif;
+      --cream:      #faf9f6;
+      --white:      #ffffff;
+      --slate-100:  #f1f0ed;
+      --slate-200:  #e3e1db;
+      --slate-300:  #ccc9c0;
+      --slate-700:  #5a5950;
+      --slate-900:  #2d2c27;
+      --sage:       #8ba888;
+      --sage-dark:  #6d8a6b;
+      --coral:      #e8927c;
+      --amber:      #d9a05b;
+      --blue:       #6b9fbe;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font-ui);
+      background: var(--cream);
+      color: var(--slate-900);
+      line-height: 1.6;
+      min-height: 100vh;
+      padding: 32px 20px 80px;
+    }
+
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    /* ── HEADER ── */
+    header {
+      margin-bottom: 56px;
+      border-bottom: 1px solid var(--slate-200);
+      padding-bottom: 28px;
+    }
+
+    .title-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 24px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+
+    h1 {
+      font-family: var(--font-display);
+      font-size: clamp(1.75rem, 4vw, 2.5rem);
+      font-weight: 700;
+      color: var(--slate-900);
+      line-height: 1.1;
+    }
+
+    .tagline {
+      font-size: 0.95rem;
+      color: var(--slate-700);
+      font-weight: 300;
+      margin-top: 6px;
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      background: var(--white);
+      border: 1px solid var(--slate-200);
+      border-radius: 20px;
+      font-size: 0.8rem;
+      color: var(--slate-700);
+    }
+
+    .status-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--slate-300);
+      transition: background 0.3s;
+    }
+    .status-dot.live {
+      background: var(--sage);
+      box-shadow: 0 0 0 3px rgba(139,168,136,0.2);
+    }
+    .status-dot.error { background: var(--coral); }
+
+    .api-input-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: var(--white);
+      border: 1px solid var(--slate-200);
+      border-radius: 8px;
+      padding: 10px 14px;
+      max-width: 480px;
+    }
+
+    .api-input-row label {
+      font-size: 0.8rem;
+      color: var(--slate-700);
+      white-space: nowrap;
+    }
+
+    .api-input-row input {
+      flex: 1;
+      border: none;
+      background: transparent;
+      font-family: var(--font-ui);
+      font-size: 0.85rem;
+      color: var(--slate-900);
+      outline: none;
+      min-width: 0;
+    }
+
+    /* ── LAYOUT GRID ── */
+    .main-grid {
+      display: grid;
+      grid-template-columns: 1.4fr 1fr;
+      gap: 32px;
+      align-items: start;
+    }
+
+    @media (max-width: 900px) {
+      .main-grid { grid-template-columns: 1fr; }
+    }
+
+    /* ── CARDS ── */
+    .card {
+      background: var(--white);
+      border: 1px solid var(--slate-200);
+      border-radius: 12px;
+      padding: 32px;
+      margin-bottom: 20px;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 28px;
+    }
+
+    .card-title {
+      font-family: var(--font-display);
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--slate-900);
+    }
+
+    .info-icon {
+      display: inline-block;
+      width: 18px; height: 18px;
+      border-radius: 50%;
+      background: var(--slate-200);
+      color: var(--slate-700);
+      font-size: 0.7rem;
+      line-height: 18px;
+      text-align: center;
+      cursor: help;
+      position: relative;
+      font-weight: 600;
+    }
+
+    .info-icon:hover { background: var(--blue); color: white; }
+
+    /* Tooltip */
+    .info-icon::after {
+      content: attr(data-tip);
+      position: absolute;
+      bottom: 130%;
+      left: 50%;
+      transform: translateX(-50%) scale(0.9);
+      background: var(--slate-900);
+      color: white;
+      font-size: 0.75rem;
+      line-height: 1.4;
+      font-weight: 400;
+      padding: 10px 14px;
+      border-radius: 6px;
+      width: 240px;
+      text-align: left;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s, transform 0.2s;
+      z-index: 10;
+      font-family: var(--font-ui);
+    }
+
+    .info-icon::before {
+      content: '';
+      position: absolute;
+      bottom: 120%;
+      left: 50%;
+      transform: translateX(-50%);
+      border: 6px solid transparent;
+      border-top-color: var(--slate-900);
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+
+    .info-icon:hover::after,
+    .info-icon:hover::before {
+      opacity: 1;
+      transform: translateX(-50%) scale(1);
+    }
+
+    /* ── SLIDERS ── */
+    .how-panel {
+      font-size: 0.9rem;
+      color: var(--slate-700);
+      line-height: 1.65;
+      margin-bottom: 20px;
+    }
+
+    .how-note {
+      margin-top: 14px;
+      padding: 0;
+      border-radius: 8px;
+      border: 1px solid var(--slate-200);
+      background: var(--slate-100);
+      color: var(--slate-900);
+    }
+
+    .slider-list {
+      display: flex;
+      flex-direction: column;
+      gap: 32px;
+    }
+
+    .slider-item {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .slider-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+    }
+
+    .slider-label-wrap {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .slider-label {
+      font-weight: 500;
+      font-size: 0.95rem;
+      color: var(--slate-900);
+    }
+
+    .slider-tip {
+      width: 18px;
+      height: 18px;
+      border: 1px solid var(--slate-300);
+      border-radius: 50%;
+      background: var(--white);
+      color: var(--slate-700);
+      font-size: 0.7rem;
+      font-weight: 700;
+      line-height: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: help;
+      position: relative;
+      padding: 0;
+      font-family: var(--font-ui);
+    }
+
+    .slider-tip:hover,
+    .slider-tip:focus-visible {
+      border-color: var(--blue);
+      color: var(--blue);
+      outline: none;
+    }
+
+    .slider-tip::after {
+      content: attr(data-tip);
+      position: absolute;
+      bottom: 145%;
+      left: 50%;
+      transform: translateX(-50%) scale(0.94);
+      background: var(--slate-900);
+      color: white;
+      font-size: 0.75rem;
+      line-height: 1.35;
+      font-weight: 400;
+      width: 240px;
+      padding: 10px 12px;
+      border-radius: 7px;
+      text-align: left;
+      white-space: normal;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s, transform 0.2s;
+      z-index: 15;
+      font-family: var(--font-ui);
+    }
+
+    .slider-tip::before {
+      content: '';
+      position: absolute;
+      bottom: 132%;
+      left: 50%;
+      transform: translateX(-50%);
+      border: 6px solid transparent;
+      border-top-color: var(--slate-900);
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+
+    .slider-tip:hover::after,
+    .slider-tip:hover::before,
+    .slider-tip:focus-visible::after,
+    .slider-tip:focus-visible::before {
+      opacity: 1;
+      transform: translateX(-50%) scale(1);
+    }
+
+    .slider-value {
+      font-family: var(--font-display);
+      font-size: 1.05rem;
+      font-weight: 600;
+      color: var(--sage-dark);
+      cursor: text;
+    }
+
+    .slider-value:hover { color: var(--blue); }
+
+    .slider-input-edit {
+      display: none;
+      width: 80px;
+      text-align: right;
+      font-family: var(--font-display);
+      font-size: 1.05rem;
+      font-weight: 600;
+      color: var(--sage-dark);
+      border: none;
+      border-bottom: 2px solid var(--blue);
+      background: transparent;
+      outline: none;
+    }
+
+    .slider-desc {
+      font-size: 0.8rem;
+      color: var(--slate-700);
+      font-weight: 300;
+    }
+
+    .range-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: 4px;
+    }
+
+    .range-bound {
+      font-size: 0.75rem;
+      color: var(--slate-700);
+      min-width: 32px;
+      font-weight: 300;
+    }
+
+    input[type=range] {
+      flex: 1;
+      height: 6px;
+      background: var(--slate-200);
+      border-radius: 10px;
+      outline: none;
+      cursor: pointer;
+    }
+
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 20px; height: 20px;
+      border-radius: 50%;
+      background: var(--sage);
+      border: 3px solid white;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+      cursor: pointer;
+      transition: transform 0.15s, box-shadow 0.15s;
+    }
+
+    input[type=range]:hover::-webkit-slider-thumb {
+      transform: scale(1.15);
+      box-shadow: 0 3px 12px rgba(0,0,0,0.2);
+    }
+
+    /* ── RESULT PANEL ── */
+    .result-panel {
+      position: sticky;
+      top: 32px;
+    }
+
+    /* ── GAUGE ── */
+    .gauge-card {
+      text-align: center;
+      padding: 36px 28px 28px;
+    }
+
+    .gauge-label {
+      font-size: 0.8rem;
+      color: var(--slate-700);
+      font-weight: 500;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      margin-bottom: 16px;
+    }
+
+    .gauge-svg { width: 100%; max-width: 220px; margin: 0 auto; }
+
+    .gauge-value {
+      font-family: var(--font-display);
+      font-size: 3.5rem;
+      font-weight: 700;
+      line-height: 1;
+      margin: 16px 0 12px;
+      transition: color 0.5s;
+    }
+
+    .gauge-verdict {
+      display: inline-block;
+      font-size: 0.85rem;
+      font-weight: 500;
+      padding: 8px 18px;
+      border-radius: 20px;
+      transition: background 0.4s, color 0.4s;
+    }
+
+    .verdict-safe { background: rgba(139,168,136,0.15); color: var(--sage-dark); }
+    .verdict-warn { background: rgba(217,160,91,0.15); color: #b8823d; }
+    .verdict-danger { background: rgba(232,146,124,0.15); color: #c76b56; }
+
+    .threshold-info {
+      margin-top: 16px;
+      font-size: 0.75rem;
+      color: var(--slate-700);
+      font-weight: 300;
+    }
+
+    /* ── INSIGHT CARDS ── */
+    .insight-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .insight-box {
+      background: var(--slate-100);
+      border: 1px solid var(--slate-200);
+      border-radius: 8px;
+      padding: 16px;
+    }
+
+    .insight-val {
+      font-family: var(--font-display);
+      font-size: 1.5rem;
+      font-weight: 600;
+      color: var(--slate-900);
+      line-height: 1;
+    }
+
+    .insight-label {
+      font-size: 0.7rem;
+      color: var(--slate-700);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-top: 6px;
+      font-weight: 500;
+    }
+
+    /* ── FACTORS ── */
+    .factor-list {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      margin-top: 12px;
+    }
+
+    .factor-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .factor-legend {
+      font-size: 0.78rem;
+      color: var(--slate-700);
+      margin-top: -12px;
+      margin-bottom: 12px;
+    }
+
+    .factor-name {
+      font-size: 0.85rem;
+      color: var(--slate-700);
+      width: 120px;
+      flex-shrink: 0;
+      font-weight: 400;
+    }
+
+    .factor-bar-track {
+      flex: 1;
+      height: 8px;
+      background: var(--slate-200);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    .factor-bar-fill {
+      height: 100%;
+      border-radius: 10px;
+      transition: width 0.5s ease, background 0.5s;
+    }
+
+    .factor-pct {
+      font-size: 0.78rem;
+      color: var(--slate-900);
+      min-width: 62px;
+      text-align: right;
+      font-weight: 600;
+    }
+
+    .factor-meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 140px;
+      justify-content: flex-end;
+    }
+
+    .factor-level {
+      font-size: 0.68rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      padding: 4px 8px;
+      border-radius: 999px;
+      border: 1px solid var(--slate-200);
+      background: var(--slate-100);
+      color: var(--slate-700);
+      min-width: 70px;
+      text-align: center;
+    }
+
+    .factor-level-low {
+      color: var(--sage-dark);
+      border-color: rgba(139,168,136,0.35);
+      background: rgba(139,168,136,0.12);
+    }
+
+    .factor-level-moderate {
+      color: #a87432;
+      border-color: rgba(217,160,91,0.35);
+      background: rgba(217,160,91,0.12);
+    }
+
+    .factor-level-high {
+      color: #b55a46;
+      border-color: rgba(232,146,124,0.4);
+      background: rgba(232,146,124,0.14);
+    }
+
+    /* ── BUTTON ── */
+    .predict-btn {
+      width: 100%;
+      padding: 16px;
+      border: none;
+      border-radius: 10px;
+      background: var(--sage);
+      color: white;
+      font-family: var(--font-ui);
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s, box-shadow 0.2s;
+      box-shadow: 0 2px 8px rgba(139,168,136,0.25);
+    }
+
+    .predict-btn:hover {
+      background: var(--sage-dark);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(139,168,136,0.35);
+    }
+
+    .predict-btn:active { transform: translateY(0); }
+
+    .predict-btn.loading {
+      pointer-events: none;
+      opacity: 0.7;
+    }
+
+    .btn-spinner {
+      display: none;
+      width: 14px; height: 14px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+
+    .predict-btn.loading .btn-spinner { display: inline-block; }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── TOAST ── */
+    .toast {
+      position: fixed;
+      bottom: 32px;
+      right: 32px;
+      background: var(--slate-900);
+      color: white;
+      font-size: 0.85rem;
+      padding: 14px 20px;
+      border-radius: 8px;
+      max-width: 320px;
+      z-index: 100;
+      transform: translateY(80px);
+      opacity: 0;
+      transition: transform 0.3s, opacity 0.3s;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+    }
+
+    .toast.show { transform: translateY(0); opacity: 1; }
+
+    /* ── GAUGE ANIMATION ── */
+    #gaugeArc {
+      transition: stroke-dashoffset 0.7s cubic-bezier(0.4,0,0.2,1), stroke 0.5s;
+    }
+
+    #gaugeNeedle {
+      transition: transform 0.7s cubic-bezier(0.4,0,0.2,1);
+    }
+
+    /* ── FADE IN ── */
+    .card { animation: fadeIn 0.5s ease both; }
+    .card:nth-child(2) { animation-delay: 0.1s; }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <!-- HEADER -->
+  <header>
+    <div class="title-row">
+      <div>
+        <h1>Customer Retention Monitor</h1>
+        <p class="tagline">Predict churn probability with interactive what-if scenarios</p>
+      </div>
+      <div class="status-badge">
+        <span class="status-dot" id="statusDot"></span>
+        <span id="statusText">Checking API…</span>
+      </div>
+    </div>
+
+    <div class="api-input-row">
+      <label>API Endpoint</label>
+      <input type="text" id="apiUrl" value="http://127.0.0.1:8000" />
+    </div>
+  </header>
+
+  <div class="main-grid">
+
+    <!-- LEFT: SLIDERS -->
+    <div>
+      <div class="card">
+        <div class="how-panel">
+          <p>Your parameters are sent to a FastAPI backend, which attaches the remaining baseline (average) features, scales the numeric features, and then runs the XGBoost classifier to return predictions.</p>
+          <p class="how-note"><strong>NOTE:</strong> The 7 features listed here are the most important features with the highest influence on the prediction. The remaining features are fixed values based on an average user.</p>
+        </div>
+
+        <div class="card-header">
+          <h2 class="card-title">Customer Attributes</h2>
+          <span class="info-icon" data-tip="Adjust these parameters to simulate different customer scenarios. The model will predict churn risk based on your inputs.">i</span>
+        </div>
+
+        <div class="slider-list" id="sliderList"></div>
+      </div>
+    </div>
+
+    <!-- RIGHT: RESULT PANEL -->
+    <div class="result-panel">
+
+      <!-- Gauge -->
+      <div class="card gauge-card">
+        <div class="gauge-label">Churn Probability</div>
+
+        <svg class="gauge-svg" viewBox="0 0 200 120">
+          <defs>
+            <linearGradient id="arcGrad" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stop-color="#8ba888"/>
+              <stop offset="50%" stop-color="#d9a05b"/>
+              <stop offset="100%" stop-color="#e8927c"/>
+            </linearGradient>
+          </defs>
+          <!-- Track -->
+          <path d="M20,110 A80,80 0 0,1 180,110"
+                fill="none" stroke="#e3e1db" stroke-width="14"
+                stroke-linecap="round"/>
+          <!-- Fill arc -->
+          <path id="gaugeArc"
+                d="M20,110 A80,80 0 0,1 180,110"
+                fill="none" stroke="url(#arcGrad)" stroke-width="14"
+                stroke-linecap="round"
+                stroke-dasharray="251.2"
+                stroke-dashoffset="251.2"/>
+          <!-- Needle -->
+          <g id="gaugeNeedle" transform="rotate(-90 100 110)">
+            <line x1="100" y1="110" x2="100" y2="42"
+                  stroke="#5a5950" stroke-width="2.5"
+                  stroke-linecap="round"/>
+            <circle cx="100" cy="110" r="6" fill="#5a5950"/>
+          </g>
+        </svg>
+
+        <div class="gauge-value" id="gaugeValue">—</div>
+        <div class="gauge-verdict" id="gaugeVerdict">Awaiting prediction</div>
+        <div class="threshold-info" id="thresholdInfo">Model threshold: —</div>
+      </div>
+
+      <!-- Insights -->
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">Key Metrics</h2>
+          <span class="info-icon" data-tip="Real-time view of the most important customer health indicators based on your current inputs.">i</span>
+        </div>
+        <div class="insight-grid">
+          <div class="insight-box">
+            <div class="insight-val" id="metricCSAT">—</div>
+            <div class="insight-label">CSAT Score</div>
+          </div>
+          <div class="insight-box">
+            <div class="insight-val" id="metricTenure">—</div>
+            <div class="insight-label">Tenure (mo)</div>
+          </div>
+          <div class="insight-box">
+            <div class="insight-val" id="metricLogins">—</div>
+            <div class="insight-label">Logins/Month</div>
+          </div>
+          <div class="insight-box">
+            <div class="insight-val" id="metricRevenue">—</div>
+            <div class="insight-label">Total Revenue</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Risk Factors -->
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">Risk Factors</h2>
+          <span class="info-icon" data-tip="Individual risk scores for key behavioral dimensions. Higher percentages indicate greater churn risk in that area.">i</span>
+        </div>
+        <div class="factor-legend">Higher means higher churn risk for that factor.</div>
+        <div class="factor-list" id="factorList"></div>
+      </div>
+
+      <!-- Predict Button -->
+      <button class="predict-btn" id="predictBtn" onclick="runPredict()">
+        <span class="btn-spinner"></span>
+        <span class="btn-text">Calculate Prediction</span>
+      </button>
+
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+  // ── CONFIG ──────────────────────────────────────────────
+  const SLIDER_CONFIG = [
+    {
+      key: 'monthly_logins',
+      label: 'Monthly Logins',
+      desc: 'How often the customer logs into your platform each month',
+      min: 0, max: 100, step: 1, default: 12,
+      riskDir: 'low',
+      format: v => v.toFixed(0)
+    },
+    {
+      key: 'email_open_rate',
+      label: 'Email Open Rate',
+      desc: 'Percentage of marketing emails opened by this customer',
+      min: 0, max: 1, step: 0.01, default: 0.35,
+      riskDir: 'low',
+      format: v => (v * 100).toFixed(0) + '%'
+    },
+    {
+      key: 'avg_session_time',
+      label: 'Avg. Session Time',
+      desc: 'Average time spent per session in minutes',
+      min: 0, max: 120, step: 0.5, default: 18,
+      riskDir: 'low',
+      format: v => v.toFixed(1) + ' min'
+    },
+    {
+      key: 'tenure_months',
+      label: 'Tenure',
+      desc: 'How many months this customer has been with you',
+      min: 0, max: 120, step: 1, default: 24,
+      riskDir: 'low',
+      format: v => v.toFixed(0) + ' months'
+    },
+    {
+      key: 'total_revenue',
+      label: 'Total Revenue',
+      desc: 'Lifetime revenue generated by this customer',
+      min: 0, max: 20000, step: 50, default: 4500,
+      riskDir: 'low',
+      format: v => '$' + v.toLocaleString()
+    },
+    {
+      key: 'last_login_days_ago',
+      label: 'Last Login',
+      desc: 'Number of days since the customer last logged in',
+      min: 0, max: 365, step: 1, default: 7,
+      riskDir: 'high',
+      format: v => v.toFixed(0) + ' days ago'
+    },
+    {
+      key: 'csat_score',
+      label: 'CSAT Score',
+      desc: 'Customer satisfaction score on a scale of 1 to 5',
+      min: 1, max: 5, step: 0.1, default: 3.5,
+      riskDir: 'low',
+      format: v => v.toFixed(1)
+    }
+  ];
+
+  const state = {};
+  SLIDER_CONFIG.forEach(c => state[c.key] = c.default);
+
+  function escapeHtmlAttr(text) {
+    return String(text)
+      .replace(/&/g, '&amp;')
+      .replace(/"/g, '&quot;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
+  function buildSliderTip(cfg) {
+    const riskHint = cfg.riskDir === 'high'
+      ? 'Higher values generally increase churn risk.'
+      : 'Lower values generally increase churn risk.';
+    return `${cfg.desc}. Typical range: ${cfg.format(cfg.min)} to ${cfg.format(cfg.max)}. ${riskHint}`;
+  }
+
+  function initTabs() {
+    const tabButtons = document.querySelectorAll('.tab-btn');
+    const tabPanels = document.querySelectorAll('.tab-panel');
+
+    tabButtons.forEach(button => {
+      button.addEventListener('click', () => {
+        const targetId = button.dataset.tabTarget;
+
+        tabButtons.forEach(btn => {
+          const active = btn === button;
+          btn.classList.toggle('active', active);
+          btn.setAttribute('aria-selected', active ? 'true' : 'false');
+        });
+
+        tabPanels.forEach(panel => {
+          const active = panel.id === targetId;
+          panel.classList.toggle('active', active);
+          panel.hidden = !active;
+        });
+      });
+    });
+  }
+
+  // ── BUILD SLIDERS ────────────────────────────────────────
+  const list = document.getElementById('sliderList');
+
+  SLIDER_CONFIG.forEach(cfg => {
+    const item = document.createElement('div');
+    item.className = 'slider-item';
+
+    const sliderTip = escapeHtmlAttr(buildSliderTip(cfg));
+    item.innerHTML = `
+      <div class="slider-top">
+        <div class="slider-label-wrap">
+          <span class="slider-label">${cfg.label}</span>
+          <button type="button" class="slider-tip" data-tip="${sliderTip}" aria-label="Quick info for ${cfg.label}">?</button>
+        </div>
+        <span class="slider-value" id="val_${cfg.key}">${cfg.format(cfg.default)}</span>
+        <input type="number" class="slider-input-edit" id="edit_${cfg.key}"
+               min="${cfg.min}" max="${cfg.max}" step="${cfg.step}" value="${cfg.default}"/>
+      </div>
+      <p class="slider-desc">${cfg.desc}</p>
+      <div class="range-wrapper">
+        <span class="range-bound">${cfg.format(cfg.min)}</span>
+        <input type="range" id="range_${cfg.key}"
+               min="${cfg.min}" max="${cfg.max}" step="${cfg.step}"
+               value="${cfg.default}"/>
+        <span class="range-bound">${cfg.format(cfg.max)}</span>
+      </div>
+    `;
+
+    list.appendChild(item);
+
+    const range = item.querySelector(`#range_${cfg.key}`);
+    const val   = item.querySelector(`#val_${cfg.key}`);
+    const edit  = item.querySelector(`#edit_${cfg.key}`);
+
+    function updateTrack(v) {
+      const pct = (v - cfg.min) / (cfg.max - cfg.min) * 100;
+      range.style.background = `linear-gradient(to right, var(--sage) 0%, var(--sage) ${pct}%, var(--slate-200) ${pct}%, var(--slate-200) 100%)`;
+    }
+    updateTrack(cfg.default);
+
+    range.addEventListener('input', () => {
+      const v = parseFloat(range.value);
+      state[cfg.key] = v;
+      val.textContent = cfg.format(v);
+      edit.value = v;
+      updateTrack(v);
+      updateMetrics();
+      debouncedPredict();
+    });
+
+    val.addEventListener('click', () => {
+      val.style.display = 'none';
+      edit.style.display = 'block';
+      edit.focus();
+      edit.select();
+    });
+
+    edit.addEventListener('blur', () => {
+      let v = Math.min(cfg.max, Math.max(cfg.min, parseFloat(edit.value) || cfg.min));
+      state[cfg.key] = v;
+      range.value = v;
+      val.textContent = cfg.format(v);
+      edit.style.display = 'none';
+      val.style.display = 'inline';
+      updateTrack(v);
+      updateMetrics();
+      debouncedPredict();
+    });
+
+    edit.addEventListener('keydown', e => { if (e.key === 'Enter') edit.blur(); });
+  });
+
+  // ── RISK FACTORS ─────────────────────────────────────────
+  const factorConfigs = [
+    { key: 'monthly_logins',       label: 'Low Engagement',   dir: 'low'  },
+    { key: 'csat_score',           label: 'Low Satisfaction', dir: 'low'  },
+    { key: 'tenure_months',        label: 'Low Loyalty',      dir: 'low'  },
+    { key: 'last_login_days_ago',  label: 'Inactivity',       dir: 'high' }
+  ];
+
+  const factorListEl = document.getElementById('factorList');
+  factorConfigs.forEach(fc => {
+    const el = document.createElement('div');
+    el.className = 'factor-row';
+    el.innerHTML = `
+      <span class="factor-name">${fc.label}</span>
+      <div class="factor-bar-track">
+        <div class="factor-bar-fill" id="ff_${fc.key}"></div>
+      </div>
+      <div class="factor-meta">
+        <span class="factor-pct" id="fp_${fc.key}">—</span>
+        <span class="factor-level" id="fl_${fc.key}">—</span>
+      </div>
+    `;
+    factorListEl.appendChild(el);
+  });
+
+  function updateFactors() {
+    factorConfigs.forEach(fc => {
+      const cfg = SLIDER_CONFIG.find(s => s.key === fc.key);
+      const norm = (state[fc.key] - cfg.min) / (cfg.max - cfg.min);
+      const risk = fc.dir === 'high' ? norm : (1 - norm);
+      const pct = (risk * 100).toFixed(0);
+      const fill = document.getElementById(`ff_${fc.key}`);
+      const label = document.getElementById(`fp_${fc.key}`);
+      const level = document.getElementById(`fl_${fc.key}`);
+      
+      const color = risk < 0.35 ? 'var(--sage)' : risk < 0.65 ? 'var(--amber)' : 'var(--coral)';
+      fill.style.width = pct + '%';
+      fill.style.background = color;
+      label.textContent = pct + '% risk';
+
+      if (risk < 0.35) {
+        level.textContent = 'Low';
+        level.className = 'factor-level factor-level-low';
+      } else if (risk < 0.65) {
+        level.textContent = 'Moderate';
+        level.className = 'factor-level factor-level-moderate';
+      } else {
+        level.textContent = 'High';
+        level.className = 'factor-level factor-level-high';
+      }
+    });
+  }
+
+  // ── METRICS ──────────────────────────────────────────────
+  function updateMetrics() {
+    document.getElementById('metricCSAT').textContent    = state.csat_score.toFixed(1);
+    document.getElementById('metricTenure').textContent  = state.tenure_months.toFixed(0);
+    document.getElementById('metricLogins').textContent  = state.monthly_logins.toFixed(0);
+    document.getElementById('metricRevenue').textContent = '$' + state.total_revenue.toLocaleString();
+    updateFactors();
+  }
+  updateMetrics();
+
+  // ── GAUGE UPDATE ─────────────────────────────────────────
+  function updateGauge(prob, threshold) {
+    const arc    = document.getElementById('gaugeArc');
+    const needle = document.getElementById('gaugeNeedle');
+    const valEl  = document.getElementById('gaugeValue');
+    const verd   = document.getElementById('gaugeVerdict');
+    const thrEl  = document.getElementById('thresholdInfo');
+
+    const total = 251.2;
+    const offset = total - prob * total;
+    arc.style.strokeDashoffset = offset;
+
+    const angle = -90 + prob * 180;
+    needle.setAttribute('transform', `rotate(${angle} 100 110)`);
+
+    valEl.textContent = (prob * 100).toFixed(1) + '%';
+
+    if (prob < threshold * 0.7) {
+      valEl.style.color = 'var(--sage-dark)';
+      verd.textContent = 'Low risk — customer will stay';
+      verd.className = 'gauge-verdict verdict-safe';
+    } else if (prob < threshold) {
+      valEl.style.color = '#b8823d';
+      verd.textContent = 'Moderate risk — watch closely, customer may churn';
+      verd.className = 'gauge-verdict verdict-warn';
+    } else {
+      valEl.style.color = '#c76b56';
+      verd.textContent = 'High risk — likely to churn';
+      verd.className = 'gauge-verdict verdict-danger';
+    }
+
+    thrEl.textContent = `Model threshold: ${(threshold * 100).toFixed(1)}%`;
+  }
+
+  // ── API CALL ─────────────────────────────────────────────
+  async function runPredict() {
+    const baseUrl = document.getElementById('apiUrl').value.replace(/\/$/, '');
+    const btn = document.getElementById('predictBtn');
+    btn.classList.add('loading');
+
+    try {
+      const res = await fetch(`${baseUrl}/predict`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(state)
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || `HTTP ${res.status}`);
+      }
+
+      const data = await res.json();
+      updateGauge(data.churn_probability, data.threshold_used);
+      setStatusLive(true);
+    } catch(e) {
+      showToast('API Error: ' + e.message);
+      setStatusLive(false);
+    } finally {
+      btn.classList.remove('loading');
+    }
+  }
+
+  let debTimer;
+  function debouncedPredict() {
+    clearTimeout(debTimer);
+    debTimer = setTimeout(runPredict, 500);
+  }
+
+  // ── STATUS CHECK ─────────────────────────────────────────
+  async function checkApiStatus() {
+    const baseUrl = document.getElementById('apiUrl').value.replace(/\/$/, '');
+    try {
+      const r = await fetch(`${baseUrl}/`, { signal: AbortSignal.timeout(3000) });
+      setStatusLive(r.ok);
+    } catch { setStatusLive(false); }
+  }
+
+  function setStatusLive(ok) {
+    const dot  = document.getElementById('statusDot');
+    const txt  = document.getElementById('statusText');
+    dot.className = 'status-dot ' + (ok ? 'live' : 'error');
+    txt.textContent = ok ? 'API connected' : 'API unreachable';
+  }
+
+  // ── TOAST ────────────────────────────────────────────────
+  let toastTimer;
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove('show'), 4000);
+  }
+
+  // ── INIT ─────────────────────────────────────────────────
+  initTabs();
+  checkApiStatus();
+  document.getElementById('apiUrl').addEventListener('change', checkApiStatus);
+</script>
+</body>
+</html>
