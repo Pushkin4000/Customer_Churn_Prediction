@@ -16,8 +16,7 @@ This project lets you simulate customer behavior changes (logins, session time, 
 - Real-time what-if analysis with 7 high-impact customer features
 - Probability + binary churn prediction using a saved decision threshold
 - Baseline feature completion for non-exposed model columns
-- Readiness endpoint plus frontend warm-up retries, so a serverless cold start never surfaces as a connection error
-- Diagnostics hidden behind `?debug=1`; visitors see a loading state, not an error badge
+- Health endpoint for uptime checks
 - Configurable CORS via environment variable
 
 ## Tech Stack
@@ -84,27 +83,7 @@ python -m http.server 5500
 
 Then open `http://127.0.0.1:5500/main.html`.
 
-The UI auto-fills the API endpoint as `http://127.0.0.1:8000` on localhost.
-The endpoint field is hidden by default - append `?debug=1` to the URL to show
-it (see [Diagnostics](#diagnostics)).
-
-## Diagnostics
-
-The connection status badge and the API endpoint override are developer tools,
-not visitor UI, so they are hidden by default. Append `?debug=1` to the URL to
-reveal them (it sticks for the browser session); `?debug=0` clears it. Debug
-mode also surfaces API errors as a toast.
-
-Without debug mode the page communicates through the gauge alone:
-
-| State | What the visitor sees |
-|---|---|
-| Backend still booting | Shimmer placeholder, "Warming up the model..." |
-| Prediction returned | Probability, verdict and the model threshold |
-| Backend genuinely unreachable | "Couldn't reach the model just now" plus a **Try again** button |
-
-Full error detail is always written to the browser console, so nothing is
-hidden from you - only from a casual visitor who has no use for it.
+The UI auto-fills API endpoint as `http://127.0.0.1:8000` on localhost.
 
 ## API Reference
 
@@ -114,14 +93,12 @@ Returns basic service status.
 
 ### `GET /health`
 
-Readiness check. Returns `200` only once the model artifacts are loaded, and
-`503` while they are not, so the frontend can use it to wait out a serverless
-cold start before sending a prediction.
+Health check endpoint.
 
 Response:
 
 ```json
-{ "status": "ok", "model_ready": true }
+{ "status": "ok" }
 ```
 
 ### `POST /predict`

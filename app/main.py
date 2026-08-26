@@ -56,33 +56,13 @@ class PredictionInput(BaseModel):
     last_login_days_ago: float
     csat_score: float
 
-# Warm the model at import time. On Vercel the whole module is imported during
-# the cold start of the serverless function, so paying the joblib load here
-# means the very first request that reaches a handler is already served warm.
-try:
-    _load_artifacts()
-except Exception:  # pragma: no cover - surfaced per-request by /health, /predict
-    # Don't let a boot-time failure poison the cache; let a real request retry.
-    _artifacts_error = None
-
-
 @app.get("/")
 def home():
-    return {"message": "XGBoost Churn API is active", "model_ready": _artifacts is not None}
+    return {"message": "XGBoost Churn API is active"}
 
 @app.get("/health")
 def health():
-    """Readiness probe.
-
-    Returns 200 only once the model artifacts are actually loaded, so a client
-    that gets "ok" here can immediately POST /predict without a second cold
-    start. On a serverless cold start this request is what pays the boot cost.
-    """
-    try:
-        _load_artifacts()
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail=f"Model not ready: {exc}")
-    return {"status": "ok", "model_ready": True}
+    return {"status": "ok"}
 
 @app.post("/predict")
 def predict(data: PredictionInput):

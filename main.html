@@ -94,55 +94,6 @@
       box-shadow: 0 0 0 3px rgba(139,168,136,0.2);
     }
     .status-dot.error { background: var(--coral); }
-    .status-dot.warming {
-      background: var(--amber, #d9a05b);
-      animation: statusPulse 1.2s ease-in-out infinite;
-    }
-    @keyframes statusPulse {
-      0%, 100% { box-shadow: 0 0 0 0 rgba(217,160,91,0.55); opacity: 1; }
-      50%      { box-shadow: 0 0 0 5px rgba(217,160,91,0); opacity: 0.55; }
-    }
-
-    /* Diagnostics (status badge + endpoint override) are developer tools.
-       Hidden from visitors; shown with ?debug=1 . */
-    /* body-scoped so this outranks the later .status-badge / .api-input-row
-       display rules regardless of source order. */
-    body:not(.debug) .diagnostics { display: none; }
-
-    .gauge-skeleton {
-      display: none;
-      height: 48px;
-      width: 150px;
-      margin: 4px auto 0;
-      border-radius: 10px;
-      background: linear-gradient(90deg, var(--slate-100) 25%, var(--slate-200) 37%, var(--slate-100) 63%);
-      background-size: 400% 100%;
-      animation: shimmer 1.4s ease-in-out infinite;
-    }
-    @keyframes shimmer {
-      0%   { background-position: 100% 50%; }
-      100% { background-position: 0 50%; }
-    }
-    .gauge-card.is-warming .gauge-value    { display: none; }
-    .gauge-card.is-warming .gauge-skeleton { display: block; }
-    .gauge-card.is-warming .threshold-info,
-    .gauge-card.is-offline .threshold-info { visibility: hidden; }
-
-    .gauge-retry {
-      display: none;
-      margin: 12px auto 0;
-      padding: 8px 20px;
-      border: 1px solid var(--slate-200);
-      background: var(--white);
-      border-radius: 20px;
-      font-family: var(--font-ui);
-      font-size: 0.82rem;
-      color: var(--slate-700);
-      cursor: pointer;
-      transition: background 0.2s, border-color 0.2s;
-    }
-    .gauge-retry:hover { background: var(--slate-100); border-color: var(--slate-300); }
-    .gauge-card.is-offline .gauge-retry { display: block; }
 
     .api-input-row {
       display: flex;
@@ -717,13 +668,13 @@
         <h1>Customer Retention Monitor</h1>
         <p class="tagline">Predict churn probability with interactive what-if scenarios</p>
       </div>
-      <div class="status-badge diagnostics">
+      <div class="status-badge">
         <span class="status-dot" id="statusDot"></span>
-        <span id="statusText">Starting API…</span>
+        <span id="statusText">Checking API…</span>
       </div>
     </div>
 
-    <div class="api-input-row diagnostics">
+    <div class="api-input-row">
       <label>API Endpoint</label>
       <input type="text" id="apiUrl" value="" />
     </div>
@@ -752,7 +703,7 @@
     <div class="result-panel">
 
       <!-- Gauge -->
-      <div class="card gauge-card is-warming" id="gaugeCard">
+      <div class="card gauge-card">
         <div class="gauge-label">Churn Probability</div>
 
         <svg class="gauge-svg" viewBox="0 0 200 120">
@@ -783,11 +734,9 @@
           </g>
         </svg>
 
-        <div class="gauge-skeleton" aria-hidden="true"></div>
         <div class="gauge-value" id="gaugeValue">—</div>
-        <div class="gauge-verdict" id="gaugeVerdict">Warming up the model…</div>
+        <div class="gauge-verdict" id="gaugeVerdict">Awaiting prediction</div>
         <div class="threshold-info" id="thresholdInfo">Model threshold: —</div>
-        <button type="button" class="gauge-retry" id="gaugeRetry">Try again</button>
       </div>
 
       <!-- Insights -->
@@ -1092,7 +1041,6 @@
 
   // ── GAUGE UPDATE ─────────────────────────────────────────
   function updateGauge(prob, threshold) {
-    setGaugeState('ready');
     const arc    = document.getElementById('gaugeArc');
     const needle = document.getElementById('gaugeNeedle');
     const valEl  = document.getElementById('gaugeValue');
@@ -1127,41 +1075,27 @@
 
   // ── API CALL ─────────────────────────────────────────────
   async function runPredict() {
+    const baseUrl = getBaseUrl();
     const btn = document.getElementById('predictBtn');
     btn.classList.add('loading');
 
     try {
-      // Never fire a prediction into a cold backend: wait for the warm-up
-      // (which is already running from page load) to finish first.
-      const ready = await ensureApiReady();
-      if (!ready) {
-        // ensureApiReady already put the gauge into its offline state.
-        return;
-      }
-
-      const baseUrl = getBaseUrl();
-      const res = await fetchWithTimeout(`${baseUrl}/predict`, {
+      const res = await fetch(`${baseUrl}/predict`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(state)
       });
 
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
+        const err = await res.json();
         throw new Error(err.detail || `HTTP ${res.status}`);
       }
 
       const data = await res.json();
       updateGauge(data.churn_probability, data.threshold_used);
-      setGaugeState('ready');
       setStatusLive(true);
     } catch(e) {
-      // Full detail stays in the console for debugging; the page stays calm.
-      console.error('[churn] prediction failed:', e);
-      if (document.body.classList.contains('debug')) {
-        showToast('API Error: ' + (e.name === 'AbortError' ? 'request timed out' : e.message));
-      }
-      setGaugeState('offline', 'Couldn’t reach the model just now');
+      showToast('API Error: ' + e.message);
       setStatusLive(false);
     } finally {
       btn.classList.remove('loading');
@@ -1174,115 +1108,20 @@
     debTimer = setTimeout(runPredict, 500);
   }
 
-  // ── DIAGNOSTICS TOGGLE ───────────────────────────────────
-  // The status badge and endpoint override are debugging aids, not visitor
-  // UI. `?debug=1` reveals them (and sticks for the session); `?debug=0`
-  // clears it.
-  (function initDebugMode() {
-    const q = new URLSearchParams(window.location.search).get('debug');
+  // ── STATUS CHECK ─────────────────────────────────────────
+  async function checkApiStatus() {
+    const baseUrl = getBaseUrl();
     try {
-      if (q === '1') sessionStorage.setItem('churnDebug', '1');
-      if (q === '0') sessionStorage.removeItem('churnDebug');
-      if (sessionStorage.getItem('churnDebug') === '1') {
-        document.body.classList.add('debug');
-      }
-    } catch {
-      if (q === '1') document.body.classList.add('debug');
-    }
-  })();
-
-  // ── GAUGE STATE ──────────────────────────────────────────
-  // 'warming'  the backend is still booting - show a skeleton, say so plainly
-  // 'ready'    we have a real number from the model
-  // 'offline'  the model genuinely could not be reached; offer a retry
-  function setGaugeState(kind, message) {
-    const card = document.getElementById('gaugeCard');
-    const verdict = document.getElementById('gaugeVerdict');
-    card.classList.toggle('is-warming', kind === 'warming');
-    card.classList.toggle('is-offline', kind === 'offline');
-    if (message) {
-      verdict.textContent = message;
-      verdict.className = 'gauge-verdict';
-    }
-  }
-
-  // ── API READINESS ────────────────────────────────────────
-  // The backend is a serverless function: the first request after an idle
-  // period pays a cold start (importing pandas/xgboost + loading the model),
-  // which is far longer than a single short-timeout probe allows. So instead
-  // of one fail-fast check we keep retrying until it answers, and only ever
-  // show an error once we've genuinely given up.
-  const WARMUP_ATTEMPTS = 8;
-  const REQUEST_TIMEOUT_MS = 30000;
-
-  let readyPromise = null;
-
-  const sleep = ms => new Promise(r => setTimeout(r, ms));
-
-  function fetchWithTimeout(url, options = {}, timeoutMs = REQUEST_TIMEOUT_MS) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-    return fetch(url, { ...options, signal: controller.signal })
-      .finally(() => clearTimeout(timer));
-  }
-
-  function setStatus(kind, text) {
-    const dot = document.getElementById('statusDot');
-    const txt = document.getElementById('statusText');
-    dot.className = 'status-dot ' + kind;
-    txt.textContent = text;
+      const r = await fetch(`${baseUrl}/health`, { signal: AbortSignal.timeout(3000) });
+      setStatusLive(r.ok);
+    } catch { setStatusLive(false); }
   }
 
   function setStatusLive(ok) {
-    if (ok) {
-      setStatus('live', 'API connected');
-    } else {
-      readyPromise = null;
-      setStatus('error', 'API unreachable');
-    }
-  }
-
-  async function probeOnce(baseUrl) {
-    const res = await fetchWithTimeout(`${baseUrl}/health`, { cache: 'no-store' });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const body = await res.json().catch(() => ({}));
-    if (body.model_ready === false) throw new Error('model not ready');
-    return true;
-  }
-
-  // Resolves true once the API answers; retries with backoff across a cold
-  // start. Concurrent callers share one in-flight warm-up.
-  function ensureApiReady() {
-    if (readyPromise) return readyPromise;
-
-    readyPromise = (async () => {
-      const baseUrl = getBaseUrl();
-      setStatus('warming', 'Starting API…');
-
-      for (let attempt = 1; attempt <= WARMUP_ATTEMPTS; attempt++) {
-        try {
-          await probeOnce(baseUrl);
-          setStatus('live', 'API connected');
-          return true;
-        } catch (e) {
-          if (attempt === WARMUP_ATTEMPTS) {
-            console.warn('[churn] API warm-up gave up after', attempt, 'attempts:', e);
-            break;
-          }
-          // Badge text is diagnostic; the visitor-facing copy lives on the gauge.
-          setStatus('warming', `Waking up the model… (${attempt}/${WARMUP_ATTEMPTS})`);
-          setGaugeState('warming', 'Warming up the model…');
-          await sleep(Math.min(800 * Math.pow(1.6, attempt - 1), 4000));
-        }
-      }
-
-      setStatus('error', 'API unreachable');
-      setGaugeState('offline', 'Couldn’t reach the model just now');
-      readyPromise = null;   // allow a later action to retry from scratch
-      return false;
-    })();
-
-    return readyPromise;
+    const dot  = document.getElementById('statusDot');
+    const txt  = document.getElementById('statusText');
+    dot.className = 'status-dot ' + (ok ? 'live' : 'error');
+    txt.textContent = ok ? 'API connected' : 'API unreachable';
   }
 
   // ── TOAST ────────────────────────────────────────────────
@@ -1297,26 +1136,8 @@
 
   // ── INIT ─────────────────────────────────────────────────
   initTabs();
-
-  // Warm the backend immediately and show the first prediction as soon as it
-  // answers, so the page is never sitting in an "unreachable" state waiting
-  // for the user to move a slider.
-  (async function boot() {
-    setGaugeState('warming', 'Warming up the model…');
-    const ready = await ensureApiReady();
-    if (ready) await runPredict();
-  })();
-
-  document.getElementById('gaugeRetry').addEventListener('click', () => {
-    readyPromise = null;
-    setGaugeState('warming', 'Warming up the model…');
-    runPredict();
-  });
-
-  apiInput.addEventListener('change', () => {
-    readyPromise = null;
-    ensureApiReady().then(ok => { if (ok) runPredict(); });
-  });
+  checkApiStatus();
+  apiInput.addEventListener('change', checkApiStatus);
 </script>
 </body>
 </html>
