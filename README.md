@@ -16,7 +16,7 @@ This project lets you simulate customer behavior changes (logins, session time, 
 - Real-time what-if analysis with 7 high-impact customer features
 - Probability + binary churn prediction using a saved decision threshold
 - Baseline feature completion for non-exposed model columns
-- Health endpoint for uptime checks
+- Readiness endpoint plus frontend warm-up retries, so a serverless cold start never surfaces as a connection error
 - Configurable CORS via environment variable
 
 ## Tech Stack
@@ -93,12 +93,14 @@ Returns basic service status.
 
 ### `GET /health`
 
-Health check endpoint.
+Readiness check. Returns `200` only once the model artifacts are loaded, and
+`503` while they are not, so the frontend can use it to wait out a serverless
+cold start before sending a prediction.
 
 Response:
 
 ```json
-{ "status": "ok" }
+{ "status": "ok", "model_ready": true }
 ```
 
 ### `POST /predict`
