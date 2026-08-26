@@ -5,18 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Customer Retention Monitor</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <!-- Loaded without blocking: a render-blocking stylesheet in <head> also
-       blocks the inline script below it, which delayed the first /predict
-       call by ~500ms. The font swaps in when it arrives; the stack below
-       falls back to a system face until then. -->
-  <link rel="preload" as="style"
-        href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&display=swap"
-        onload="this.onload=null;this.rel='stylesheet'">
-  <noscript>
-    <link rel="stylesheet"
-          href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&display=swap">
-  </noscript>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
   <style>
     :root {
       --font-ui:    'Google Sans', 'Google Sans Text', 'DM Sans', 'Segoe UI', sans-serif;
@@ -1093,46 +1082,35 @@
   }
 
   // ── API CALL ─────────────────────────────────────────────
-  async function postPredict(baseUrl) {
-    const res = await fetchWithTimeout(`${baseUrl}/predict`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(state)
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.detail || `HTTP ${res.status}`);
-    }
-    return res.json();
-  }
-
   async function runPredict() {
     const btn = document.getElementById('predictBtn');
-    const baseUrl = getBaseUrl();
     btn.classList.add('loading');
 
     try {
-      let data;
-      try {
-        // Go straight for the prediction. The request warms the function by
-        // itself, so on a cold start this saves the extra /health round trip
-        // that a probe-then-predict sequence would cost.
-        data = await postPredict(baseUrl);
-        apiReady = true;
-      } catch (first) {
-        // Only now fall back to the patient warm-up loop.
-        console.warn('[churn] first attempt failed, warming up:', first);
-        setStatus('warming', 'Waking up the model…');
-        apiReady = false;
-        readyPromise = null;
-        if (!await ensureApiReady()) return;   // ensureApiReady sets the badge
-        data = await postPredict(baseUrl);
+      // Never fire a prediction into a cold backend: wait for the warm-up
+      // (which is already running from page load) to finish first.
+      const ready = await ensureApiReady();
+      if (!ready) {
+        showToast('API is not responding. Check the endpoint above and try again.');
+        return;
       }
 
+      const baseUrl = getBaseUrl();
+      const res = await fetchWithTimeout(`${baseUrl}/predict`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(state)
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || `HTTP ${res.status}`);
+      }
+
+      const data = await res.json();
       updateGauge(data.churn_probability, data.threshold_used);
       setStatusLive(true);
     } catch(e) {
-      console.error('[churn] prediction failed:', e);
       showToast('API Error: ' + (e.name === 'AbortError' ? 'request timed out' : e.message));
       setStatusLive(false);
     } finally {
@@ -1156,7 +1134,6 @@
   const REQUEST_TIMEOUT_MS = 30000;
 
   let readyPromise = null;
-  let apiReady = false;
 
   const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -1175,7 +1152,6 @@
   }
 
   function setStatusLive(ok) {
-    apiReady = ok;
     if (ok) {
       setStatus('live', 'API connected');
     } else {
@@ -1195,7 +1171,6 @@
   // Resolves true once the API answers; retries with backoff across a cold
   // start. Concurrent callers share one in-flight warm-up.
   function ensureApiReady() {
-    if (apiReady) return Promise.resolve(true);
     if (readyPromise) return readyPromise;
 
     readyPromise = (async () => {
@@ -1205,7 +1180,6 @@
       for (let attempt = 1; attempt <= WARMUP_ATTEMPTS; attempt++) {
         try {
           await probeOnce(baseUrl);
-          apiReady = true;
           setStatus('live', 'API connected');
           return true;
         } catch (e) {
@@ -1240,15 +1214,18 @@
   // answers, so the page is never sitting in an "unreachable" state waiting
   // for the user to move a slider.
   (async function boot() {
-    setStatus('warming', 'Connecting…');
-    document.getElementById('gaugeVerdict').textContent = 'Loading prediction…';
-    await runPredict();
+    document.getElementById('gaugeVerdict').textContent = 'Starting the model…';
+    const ready = await ensureApiReady();
+    if (ready) {
+      await runPredict();
+    } else {
+      document.getElementById('gaugeVerdict').textContent = 'API unavailable — check the endpoint above';
+    }
   })();
 
   apiInput.addEventListener('change', () => {
-    apiReady = false;
     readyPromise = null;
-    runPredict();
+    ensureApiReady().then(ok => { if (ok) runPredict(); });
   });
 </script>
 </body>

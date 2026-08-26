@@ -1,11 +1,10 @@
-import math
 import os
 from pathlib import Path
-
-import numpy as np
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+import pandas as pd
+import joblib
 
 app = FastAPI(title="Churn What-If API")
 
@@ -24,65 +23,30 @@ app.add_middleware(
 )
 
 ARTIFACT_DIR = Path(__file__).resolve().parent
-BUNDLE = ARTIFACT_DIR / "model_compiled.npz"
+_artifacts = None
+_artifacts_error = None
 
-# The XGBoost model is 66 trees of max depth 4. Importing xgboost to evaluate
-# that costs ~2.3s of cold start and pulls in pandas, scikit-learn and scipy;
-# tools/compile_model.py flattens the same trees into plain arrays so this
-# function needs nothing heavier than numpy. Regenerate after retraining.
-_M = None
-_load_error = None
+def _load_artifacts():
+    global _artifacts, _artifacts_error
+    if _artifacts is not None:
+        return _artifacts
+    if _artifacts_error is not None:
+        raise RuntimeError(_artifacts_error)
 
-
-def _load():
-    global _M, _load_error
-    if _M is not None:
-        return _M
-    if _load_error is not None:
-        raise RuntimeError(_load_error)
     try:
-        z = np.load(BUNDLE, allow_pickle=True)
-        features = [str(f) for f in z["features"]]
-        _M = {
-            "baseline": z["baseline"],
-            "features": features,
-            # Column index for each what-if field the client may send.
-            "exposed": {str(name): features.index(str(name)) for name in z["exposed"]},
-            "scale_idx": z["scale_idx"],
-            "scale_mul": z["scale_mul"],
-            "scale_add": z["scale_add"],
-            "threshold": float(z["threshold"]),
-            "intercept": float(z["intercept"]),
-            "feat": z["feat"], "thresh": z["thresh"],
-            "left": z["left"], "right": z["right"],
-            "miss": z["miss"], "leaf": z["leaf"],
+        _artifacts = {
+            "model": joblib.load(ARTIFACT_DIR / "model.pkl"),
+            "threshold": joblib.load(ARTIFACT_DIR / "threshold.pkl"),
+            "features": joblib.load(ARTIFACT_DIR / "feature_names.pkl"),
+            "baseline": joblib.load(ARTIFACT_DIR / "baseline.pkl"),
+            "scaler": joblib.load(ARTIFACT_DIR / "scaler.pkl"),
         }
-        _M["tree_ix"] = np.arange(_M["feat"].shape[0])
-        return _M
+        return _artifacts
     except Exception as exc:
-        _load_error = f"artifact load failed: {exc}"
-        raise RuntimeError(_load_error) from exc
+        _artifacts_error = f"artifact load failed: {exc}"
+        raise RuntimeError(_artifacts_error) from exc
 
-
-def _margin(m, x):
-    """Walk every tree at once; depth is bounded so this is a handful of steps."""
-    ix = m["tree_ix"]
-    node = np.zeros(ix.shape[0], dtype=np.int64)
-    feat, thresh, left, right, miss = m["feat"], m["thresh"], m["left"], m["right"], m["miss"]
-
-    for _ in range(feat.shape[1]):          # generous upper bound on depth
-        f = feat[ix, node]
-        active = f >= 0
-        if not active.any():
-            break
-        vals = x[np.where(active, f, 0)]    # dummy index 0 where inactive
-        nxt = np.where(vals < thresh[ix, node], left[ix, node], right[ix, node])
-        nxt = np.where(np.isnan(vals), miss[ix, node], nxt)
-        node = np.where(active, nxt, node)
-
-    return m["intercept"] + float(m["leaf"][ix, node].sum())
-
-
+# Define the user-facing features for the What-If tool
 class PredictionInput(BaseModel):
     monthly_logins: float
     email_open_rate: float
@@ -92,59 +56,77 @@ class PredictionInput(BaseModel):
     last_login_days_ago: float
     csat_score: float
 
-
-# Warm the bundle at import. It is ~16 KB, so this costs almost nothing and
-# guarantees the function is ready the moment it can answer at all.
+# Warm the model at import time. On Vercel the whole module is imported during
+# the cold start of the serverless function, so paying the joblib load here
+# means the very first request that reaches a handler is already served warm.
 try:
-    _load()
-except Exception:
-    _load_error = None  # let a real request retry rather than caching a boot failure
+    _load_artifacts()
+except Exception:  # pragma: no cover - surfaced per-request by /health, /predict
+    # Don't let a boot-time failure poison the cache; let a real request retry.
+    _artifacts_error = None
 
 
 @app.get("/")
 def home():
-    return {"message": "XGBoost Churn API is active", "model_ready": _M is not None}
-
+    return {"message": "XGBoost Churn API is active", "model_ready": _artifacts is not None}
 
 @app.get("/health")
 def health():
-    """Readiness probe: 200 only once the model is actually loaded."""
+    """Readiness probe.
+
+    Returns 200 only once the model artifacts are actually loaded, so a client
+    that gets "ok" here can immediately POST /predict without a second cold
+    start. On a serverless cold start this request is what pays the boot cost.
+    """
     try:
-        _load()
+        _load_artifacts()
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"Model not ready: {exc}")
     return {"status": "ok", "model_ready": True}
 
-
 @app.post("/predict")
 def predict(data: PredictionInput):
     try:
-        m = _load()
+        artifacts = _load_artifacts()
+        model = artifacts["model"]
+        threshold = artifacts["threshold"]
+        features = artifacts["features"]
+        baseline = artifacts["baseline"]
+        scaler = artifacts["scaler"]
 
-        # 1. Start from the baseline (mean training profile), which fills every
-        #    column the UI does not expose - city dummies and the like.
-        x = m["baseline"].copy()
+        # 1. Start with the baseline (mean of training data)
+        # This fills in all the dummy columns (city_Berlin, etc.) with their average frequencies
+        input_df = pd.DataFrame([baseline.values], columns=features)
 
-        # 2. Overwrite the what-if features with the user's input.
-        for col, value in data.model_dump().items():
-            idx = m["exposed"].get(col)
-            if idx is not None:
-                x[idx] = value
+        # 2. Update the 'What-If' features with user input
+        user_input_dict = data.model_dump()
+        for col, value in user_input_dict.items():
+            if col in input_df.columns:
+                input_df.at[0, col] = value
 
-        # 3. Apply the MinMaxScaler to exactly the columns it was fitted on.
-        #    MinMaxScaler is affine, so this is the whole of its transform.
-        si = m["scale_idx"]
-        x[si] = x[si] * m["scale_mul"] + m["scale_add"]
+        # 3. Handle Scaling
+        # According to your notebook, you only scaled specific columns (cols_to_scale).
+        # We use 'scaler.feature_names_in_' to know exactly which ones to transform.
+        cols_to_scale = scaler.feature_names_in_
+        
+        # Scale only the required numerical columns
+        input_df[cols_to_scale] = scaler.transform(input_df[cols_to_scale])
 
-        # 4. Evaluate the trees; column order is baked into the bundle.
-        prob = 1.0 / (1.0 + math.exp(-_margin(m, x)))
-        prediction = 1 if prob > m["threshold"] else 0
+        # 4. Final Alignment
+        # Ensure the column order is EXACTLY what XGBoost saw during training
+        input_df = input_df[features]
+
+        # 5. Prediction
+        # XGBoost often prefers DMatrix or clean numpy arrays/DataFrames
+        prob = model.predict_proba(input_df)[0][1]
+        prediction = 1 if prob > threshold else 0
 
         return {
             "churn_probability": float(round(prob, 4)),
             "churn_prediction": prediction,
-            "threshold_used": float(m["threshold"]),
+            "threshold_used": float(threshold)
         }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Inference Error: {str(e)}")
+

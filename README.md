@@ -17,7 +17,6 @@ This project lets you simulate customer behavior changes (logins, session time, 
 - Probability + binary churn prediction using a saved decision threshold
 - Baseline feature completion for non-exposed model columns
 - Readiness endpoint plus frontend warm-up retries, so a serverless cold start never surfaces as a connection error
-- XGBoost compiled away for inference: ~2.8s cold start down to ~0.7s
 - Configurable CORS via environment variable
 
 ## Tech Stack
@@ -25,8 +24,7 @@ This project lets you simulate customer behavior changes (logins, session time, 
 | Layer | Tools |
 |---|---|
 | API | FastAPI, Pydantic |
-| ML Inference | numpy (model compiled from XGBoost - see below) |
-| Training / tooling | XGBoost, scikit-learn, pandas, joblib (dev only) |
+| ML Inference | XGBoost, scikit-learn, pandas, joblib |
 | Frontend | Vanilla HTML/CSS/JS |
 | Deployment | Vercel (`@vercel/python`, `@vercel/static`) |
 
@@ -36,18 +34,13 @@ This project lets you simulate customer behavior changes (logins, session time, 
 Customer_Churn_Prediction/
 |- app/
 |  |- main.py
-|  |- model_compiled.npz   <- what the API actually loads
-|  |- model.pkl            <- training artifacts, kept as source of truth
+|  |- model.pkl
 |  |- threshold.pkl
 |  |- feature_names.pkl
 |  |- baseline.pkl
 |  |- scaler.pkl
-|- tools/
-|  |- compile_model.py
-|  |- verify_compiled_model.py
 |- main.html
 |- requirements.txt
-|- requirements-dev.txt
 |- vercel.json
 |- LICENSE
 ```
@@ -66,12 +59,6 @@ python -m venv .venv
 ```powershell
 pip install -r requirements.txt
 pip install uvicorn
-```
-
-To retrain or recompile the model you also need the dev extras:
-
-```powershell
-pip install -r requirements-dev.txt
 ```
 
 ### 3. Run the API
@@ -148,49 +135,12 @@ Response:
 
 For each request, the API:
 
-1. Loads the compiled bundle (`app/model_compiled.npz`)
+1. Loads model artifacts (`model`, `threshold`, `features`, `baseline`, `scaler`)
 2. Starts from baseline (mean training profile)
 3. Overwrites exposed what-if features with user inputs
-4. Applies the MinMaxScaler's affine transform to the columns it was fitted on
-5. Walks the decision trees over the training-time column order
-6. Applies the sigmoid and the stored threshold
-
-## Compiled Model
-
-The serverless function does **not** import XGBoost. That import alone costs
-~2.3s of cold start and transitively pulls in pandas, scikit-learn and scipy,
-which is a lot of machinery for a model that is 16 trees of max depth 4.
-
-`tools/compile_model.py` flattens the trained booster into plain numpy arrays
-(`app/model_compiled.npz`, ~7 KB), so the runtime needs only `fastapi` and
-`numpy`. Measured cold start went from ~2.8s to ~0.7s.
-
-Two details the compiler has to get right, both covered by the verifier:
-
-- The model was trained with early stopping (`best_iteration=15` of
-  `n_estimators=1000`), so `predict_proba` evaluates only the first 16 trees
-  while the booster dump contains all 66. Summing all of them changes the
-  prediction.
-- The margin intercept is calibrated against `predict_proba`, not against
-  `booster.inplace_predict(predict_type="margin")` - the latter omits the base
-  score that `predict_proba` applies.
-
-### Regenerating after retraining
-
-```powershell
-pip install -r requirements-dev.txt
-python tools/compile_model.py
-python tools/verify_compiled_model.py
-```
-
-`verify_compiled_model.py` compares the compiled path against the original
-pandas + scikit-learn + XGBoost pipeline over 5,000+ inputs spanning every
-slider's full range plus out-of-range probes. It requires zero churn-verdict
-flips and agreement to within 1e-6; the two paths currently agree to 6e-8
-(XGBoost accumulates in float32, so they are not bit-identical).
-
-The original `.pkl` artifacts stay in `app/` as the source of truth - they are
-simply no longer loaded at runtime.
+4. Scales only columns expected by the saved scaler
+5. Aligns final feature order to training-time columns
+6. Runs `predict_proba` and applies stored threshold
 
 ## Configuration
 
